@@ -15,3 +15,5 @@ using LinearOperators, CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
   @test y isa CuVector{Float32}
   @testset "Nvidia S kwarg" test_S_kwarg(arrayType = CuArray)
 end
+
+include("../test_clbfgs.jl")
