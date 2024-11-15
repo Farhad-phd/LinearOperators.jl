@@ -1,1 +1,1 @@
-You can check an [Introduction to LinearOperators.jl](https://jso-docs.github.io/introduction-to-linear-operators/) on our site, [jso-docs](https://jso-docs.github.io).
+You can check an [Introduction to LinearOperators.jl](https://jso.dev/tutorials/introduction-to-linear-operators/) on our site, [jso.dev](https://jso.dev/).

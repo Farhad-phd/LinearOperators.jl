@@ -20,7 +20,6 @@ function test_linop()
 
       @testset "Size" begin
         @test(size(op) == (nrow, ncol))
-        @test(shape(op) == (nrow, ncol))
         @test(size(op, 1) == nrow)
         @test(size(op, 2) == ncol)
         @test_throws LinearOperatorException size(op, 3)
@@ -62,6 +61,18 @@ function test_linop()
         @test(norm(transpose(u) * A - transpose(u) * op) <= rtol * norm(u))
         @test(typeof(u' * op * v) <: Number)
         @test(norm(u' * A * v - u' * op * v) <= rtol * norm(u))
+
+        mv = hcat(v, -2v)
+        mu = hcat(u, -2u)
+        res_mat = similar(mu)
+        res_trans = similar(mv)
+        res_adj = similar(mv)
+        mul!(res_mat, op, mv)
+        mul!(res_trans, transpose(op), mu)
+        mul!(res_adj, op', mu)
+        @test(norm(A * mv - res_mat) <= rtol * norm(mv))
+        @test(norm(transpose(A) * mu - res_trans) <= rtol * norm(mu))
+        @test(norm(A' * mu - res_adj) <= rtol * norm(mu))
       end
 
       A3 = Hermitian(A2' * A2)
@@ -270,6 +281,10 @@ function test_linop()
       op2 = opEye()
       @test op === op2
       @test op === op * op2 === op2 * op
+
+      @test norm(transpose(op) * v - v) <= ϵ * norm(v)
+      @test norm(adjoint(op) * v - v) <= ϵ * norm(v)
+      @test norm(conj(op) * v - v) <= ϵ * norm(v)
     end
 
     @testset "Ones" begin
@@ -676,7 +691,7 @@ function test_linop()
     for _ = 1:nctprods
       op' * rand(3)
     end
-    for fn ∈ (:size, :shape, :issymmetric, :ishermitian, :nprod, :ntprod, :nctprod)
+    for fn ∈ (:size, :issymmetric, :ishermitian, :nprod, :ntprod, :nctprod)
       @eval begin
         @test $fn($top) == $fn($top.op)
       end

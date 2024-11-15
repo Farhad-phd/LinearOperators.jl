@@ -51,7 +51,7 @@ nprod(A::TransposeLinearOperator) = ntprod(A.parent)
 ntprod(A::TransposeLinearOperator) = nprod(A.parent)
 nctprod(A::TransposeLinearOperator) = nprod(A.parent)  # (transpose(A))' = conj(A)
 
-for f in [:nprod, :ntprod, :nctprod, :increase_nprod, :increase_ntprod, :increase_nctprod]
+for f in [:nprod, :ntprod, :nctprod, :increase_nprod!, :increase_ntprod!, :increase_nctprod!]
   @eval begin
     $f(A::ConjugateLinearOperator) = $f(A.parent)
   end
@@ -110,7 +110,7 @@ function mul!(
     return mul!(res, p, v, α, β)
   end
   if p.ctprod! !== nothing
-    increase_nctprod(p)
+    increase_nctprod!(p)
     if use_p5!
       return p.ctprod!(res, v, α, β)
     else
@@ -128,16 +128,36 @@ function mul!(
     end
   end
   if increment_tprod
-    increase_ntprod(p)
+    increase_ntprod!(p)
   else
-    increase_nprod(p)
-  end
-  if use_p5!
-    tprod!(res, v, α, β)
-  else
-    prod3!(res, tprod!, v, α, β, p.Mtu5)
+    increase_nprod!(p)
   end
   conj!(res)
+  if use_p5!
+    tprod!(res, conj.(v), conj(α), conj(β))
+  else
+    prod3!(res, tprod!, conj.(v), conj(α), conj(β), p.Mtu5)
+  end
+  conj!(res)
+end
+
+function mul!(
+  res::AbstractMatrix,
+  op::AdjointLinearOperator{T, S},
+  m::AbstractMatrix,
+  α,
+  β,
+) where {T, S}
+  p = op.parent
+  (size(m, 1) == size(p, 1) && size(res, 1) == size(p, 2) && size(m, 2) == size(res, 2)) ||
+    throw(LinearOperatorException("shape mismatch"))
+  if ishermitian(p)
+    return mul!(res, p, m, α, β)
+  elseif p.ctprod! !== nothing
+    return p.ctprod!(res, m, α, β)
+  else
+    error("Not implemented")
+  end
 end
 
 function mul!(
@@ -156,7 +176,7 @@ function mul!(
     return mul!(res, p, v, α, β)
   end
   if p.tprod! !== nothing
-    increase_ntprod(p)
+    increase_ntprod!(p)
     if use_p5!
       return p.tprod!(res, v, α, β)
     else
@@ -174,9 +194,9 @@ function mul!(
     end
   end
   if increment_ctprod
-    increase_nctprod(p)
+    increase_nctprod!(p)
   else
-    increase_nprod(p)
+    increase_nprod!(p)
   end
   conj!(res)
   if use_p5!
@@ -188,9 +208,40 @@ function mul!(
 end
 
 function mul!(
+  res::AbstractMatrix,
+  op::TransposeLinearOperator{T, S},
+  m::AbstractMatrix,
+  α,
+  β,
+) where {T, S}
+  p = op.parent
+  (size(m, 1) == size(p, 1) && size(res, 1) == size(p, 2) && size(m, 2) == size(res, 2)) ||
+    throw(LinearOperatorException("shape mismatch"))
+  if issymmetric(p)
+    return mul!(res, p, m, α, β)
+  elseif p.tprod! !== nothing
+    return p.tprod!(res, m, α, β)
+  else
+    error("Not implemented")
+  end
+end
+
+function mul!(
   res::AbstractVector,
   op::ConjugateLinearOperator{T, S},
   v::AbstractVector,
+  α,
+  β,
+) where {T, S}
+  p = op.parent
+  mul!(res, p, conj.(v), α, β)
+  conj!(res)
+end
+
+function mul!(
+  res::AbstractMatrix,
+  op::ConjugateLinearOperator{T, S},
+  v::AbstractMatrix,
   α,
   β,
 ) where {T, S}

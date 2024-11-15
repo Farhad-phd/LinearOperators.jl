@@ -19,7 +19,7 @@
 
 ## How to Cite
 
-If you use LinearOperators.jl in your work, please cite using the format given in [`CITATION.bib`](https://github.com/JuliaSmoothOptimizers/LinearOperators.jl/blob/main/CITATION.bib).
+If you use LinearOperators.jl in your work, please cite using the format given in [`CITATION.cff`](https://github.com/JuliaSmoothOptimizers/LinearOperators.jl/blob/main/CITATION.cff).
 
 ## Philosophy
 
@@ -27,7 +27,7 @@ Operators behave like matrices (with some exceptions - see below) but are define
 
 ## Compatibility
 
-Julia 1.3 and up.
+[Julia 1.6](https://julialang.org/downloads/#long_term_support_release) and up.
 
 ## How to Install
 
@@ -74,11 +74,11 @@ Function           | Description
 `hermitian`        | Determine whether the operator is Hermitian
 `push!`            | For L-BFGS or L-SR1 operators, push a new pair {s,y}
 `reset!`           | For L-BFGS or L-SR1 operators, reset the data
-`shape`            | Return the size of a linear operator
 `show`             | Display basic information about an operator
 `size`             | Return the size of a linear operator
 `symmetric`        | Determine whether the operator is symmetric
 `normest`          | Estimate the 2-norm
+`solve_shifted_system!`          | Solves linear system $(B + \sigma I) x = b$, where $B$ is a forward L-BFGS operator and $\sigma \geq 0$.
 
 
 ## Other Operations on Operators
