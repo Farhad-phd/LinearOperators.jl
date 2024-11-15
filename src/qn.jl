@@ -6,4 +6,4 @@ import LinearAlgebra.diag
 include("lbfgs.jl")
 include("lsr1.jl")
 
-include("compressed_lbfgs.jl")
+include("compact_lbfgs.jl")

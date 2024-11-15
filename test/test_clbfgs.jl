@@ -1,10 +1,10 @@
-@testset "CompressedLBFGSOperator operator" begin
+@testset "CompactLBFGSOperator operator" begin
   iter=50
   n=100
   n=5
   types = [Float32, Float64]
   for T in types  
-    lbfgs = CompressedLBFGSOperator(n; T) # mem=5
+    lbfgs = CompactLBFGSOperator(n; T) # mem=5
     V = LinearOperators.default_vector_type(;T)
     Bv = V(rand(T, n))
     s = V(rand(T, n))
