@@ -5,28 +5,18 @@ Compact LBFGS implementation from:
     DOI: 10.1007/BF01582063
 
 Implemented by Paul Raynaud (supervised by Dominique Orban)
-Edited by Farhad Rahbarnia (supervised by Dominique Orban, Dominique Monnet)
+Updated by Farhad Rahbarnia (supervised by Dominique Orban, Dominique Monnet)
 =#
 
 using LinearAlgebra, LinearAlgebra.BLAS
 using Requires
 
 export CompactLBFGSOperator, CompactLBFGSData
-# export default_matrix_type, default_vector_type
 
-#TODO Remove this and use S_keyward 
-default_matrix_type(; T::DataType=Float64) = Matrix{T}
-default_vector_type(; T::DataType=Float64) = Vector{T}
 
-#TODO we have this already 
-@init begin
-  @require CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba" begin
-    default_matrix_type(; T::DataType=Float64) = CUDA.functional() ? CUDA.CuMatrix{T, CUDA.Mem.DeviceBuffer} : Matrix{T}
-    default_vector_type(; T::DataType=Float64) = CUDA.functional() ? CUDA.CuVector{T, CUDA.Mem.DeviceBuffer} : Vector{T}
-  end
-  # this scheme may be extended to other GPU backend modules
-end
-# TODO use storage_type similar to Constructors and abstract.jl where they have mv5, mvtu5, allocated5
+# if we have GPU eneabled, we use the GPUArray, for example LinearOperatorsCUDAExt
+storage_type(op::CompactLBFGSOperator{T}) = typeof(op.sol) 
+
 
 function columnshift!(A::AbstractMatrix{T}; direction::Int=-1, indicemax::Int=size(A)[1]) where T
   map(i-> view(A,:,i+direction) .= view(A,:,i), 1-direction:indicemax)
@@ -64,76 +54,79 @@ In addition to this structures which are circurlarly update when `k` reaches `me
 - `sol`: a vector ∈ Rᵏ to store intermediate solutions;
 This implementation is designed to work either on CPU or GPU.
 """
-mutable struct CompactLBFGSData{T, M<:AbstractMatrix{T}, V<:AbstractVector{T}, I <: Integer}
+mutable struct CompactLBFGSData{T, M, S, I <: Integer}
   mem::Int # memory of the operator
   n::I # vector size
   k::I # k ≤ mem, active memory of the operator
   α::T # B₀ = αI
   Sₖ::M # gather all sₖ₋ₘ : n * mem
   Yₖ::M # gather all yₖ₋ₘ : n * mem
-  Dₖ::Diagonal{T,V} # mem * mem
+  Dₖ::Diagonal{T,S} # mem * mem
   Lₖ::LowerTriangular{T,M} # mem * mem
-
   chol_matrix::M # 2mem * 2mem
-  intermediate_diagonal::Diagonal{T,V} # mem * mem
+  intermediate_diagonal::Diagonal{T,S} # mem * mem
   intermediate_1::UpperTriangular{T,M} # 2mem * 2mem
   intermediate_2::LowerTriangular{T,M} # 2mem * 2mem
   inverse_intermediate_1::UpperTriangular{T,M} # 2mem * 2mem
   inverse_intermediate_2::LowerTriangular{T,M} # 2mem * 2mem
-  intermediary_vector::V # 2mem
-  sol::V # 2mem
-
+  intermediary_vector::S # 2mem
+  sol::S # 2mem
   nprod::I
 end
 
 """
-    CompactLBFGSData(n::Int; [T=Float64, mem=5], gpu:Bool)
+    CompactLBFGSData(n::Int; [T=Float64, mem=5], gpu:Bool)#TODO fix this 
 
 A implementation of a LBFGS operator (forward), representing a `nxn` linear application.
 It considers at most `k` BFGS iterates, and fit the architecture depending if it is launched on a CPU or a GPU.
 """
-function CompactLBFGSData(n::I; mem::I=5, T=Float64, M=default_matrix_type(; T), V=default_vector_type(; T)) where {I<:Integer}
+function CompactLBFGSData(n::I; mem::I=5, S::DataType = Vector{T}) where {T, I<:Integer}
+  
   α = (T)(1)
-  k = 0  
+  k = 0 
+  M = (S == Vector{T}) ? Matrix{T} : S # check if CPU  or GPU
   Sₖ = M(undef, n, mem)
   Yₖ = M(undef, n, mem)
-  Dₖ = Diagonal(V(undef, mem))
+  Dₖ = Diagonal(S(undef, mem))
   Lₖ = LowerTriangular(M(undef, mem, mem))
   Lₖ.data .= zero(T)
 
   chol_matrix = M(undef, mem, mem)
-  intermediate_diagonal = Diagonal(V(undef, mem))
+  intermediate_diagonal = Diagonal(S(undef, mem))
   intermediate_1 = UpperTriangular(M(undef, 2*mem, 2*mem))
   intermediate_2 = LowerTriangular(M(undef, 2*mem, 2*mem))
   inverse_intermediate_1 = UpperTriangular(M(undef, 2*mem, 2*mem))
   inverse_intermediate_2 = LowerTriangular(M(undef, 2*mem, 2*mem))
-  intermediary_vector = V(undef, 2*mem)
-  sol = V(undef, 2*mem)
+  intermediary_vector = S(undef, 2*mem)
+  sol = S(undef, 2*mem)
 
   nprod = 0
 
-  return CompactLBFGSData{T,M,V,I}(mem, n, k, α, Sₖ, Yₖ, Dₖ, Lₖ, chol_matrix, intermediate_diagonal, intermediate_1, intermediate_2, inverse_intermediate_1, inverse_intermediate_2, intermediary_vector, sol, nprod)
+  return CompactLBFGSData{T,M,S,I}(mem, n, k, α, Sₖ, Yₖ, Dₖ, Lₖ, chol_matrix, intermediate_diagonal, intermediate_1, intermediate_2, inverse_intermediate_1, inverse_intermediate_2, intermediary_vector, sol, nprod)
 end
 
-mutable struct CompactLBFGSOperator{T, M<:AbstractMatrix{T}, V<:AbstractVector{T}, F, I <: Integer}  <: AbstractQuasiNewtonOperator{T}
+
+
+mutable struct CompactLBFGSOperator{T, M, S, F, I <: Integer}  <: AbstractQuasiNewtonOperator{T}
   nrow::I
   ncol::I
   symmetric::Bool
   hermitian::Bool
-  Bv::V
-  data::CompactLBFGSData{T,M,V}
+  Bv::S
+  data::CompactLBFGSData{T,M,S}
   prod!::F    # apply the operator to a vector
   tprod!::F    # apply the transpose operator to a vector
   ctprod!::F   # apply the transpose conjugate operator to a vector
 end
 
-function CompactLBFGSOperator(n::I; mem::I=5, T=Float64, M=default_matrix_type(; T), V=default_vector_type(; T)) where {I <: Integer}
+function CompactLBFGSOperator(n::I; mem::I=5, S::DataType = Vector{T}) where {T, I <: Integer}
   nrow = n
   ncol = n
   symmetric = true
   hermitian = true
-  Bv = V(undef, n)
-  data = CompactLBFGSData(n; mem, T, M, V)
+  Bv = S(undef, n)
+
+  data = CompactLBFGSData(n; mem, T, S)
 
   prod! = @closure (res, v, α, β) -> begin
     mul!(Bv, data, v)
@@ -146,14 +139,14 @@ function CompactLBFGSOperator(n::I; mem::I=5, T=Float64, M=default_matrix_type(;
 
   F = typeof(prod!)
   
-  return CompactLBFGSOperator{T,M,V,F,I}(nrow, ncol, symmetric, hermitian, Bv, data, prod!, prod!, prod!)
+  return CompactLBFGSOperator{T,M,S,F,I}(nrow, ncol, symmetric, hermitian, Bv, data, prod!, prod!, prod!)
 end
 
 has_args5(op::CompactLBFGSOperator) = true
 use_prod5!(op::CompactLBFGSOperator) = true
 
-Base.push!(op::CompactLBFGSOperator{T,M,V}, s::V, y::V) where {T,M,V<:AbstractVector{T}} = Base.push!(op.data, s, y)
-function Base.push!(data::CompactLBFGSData{T,M,V}, s::V, y::V) where {T,M,V<:AbstractVector{T}}
+Base.push!(op::CompactLBFGSOperator{T,M,S}, s::S, y::S) where {T,M,S<:AbstractVector{T}} = Base.push!(op.data, s, y)
+function Base.push!(data::CompactLBFGSData{T,M,S}, s::S, y::S) where {T,M,S<:AbstractVector{T}}
   if data.k < data.mem # still some place in the structures
     data.k += 1
     view(data.Sₖ, :, data.k) .= s
@@ -183,8 +176,8 @@ end
 
 # Algorithm 3.2 (p15)
 # Theorem 2.3 (p6)
-Base.Matrix(op::CompactLBFGSOperator{T,M,V}) where {T,M,V} = Base.Matrix(op.data)
-function Base.Matrix(data::CompactLBFGSData{T,M,V}) where {T,M,V}
+Base.Matrix(op::CompactLBFGSOperator{T,M,S}) where {T,M,S} = Base.Matrix(op.data)
+function Base.Matrix(data::CompactLBFGSData{T,M,S}) where {T,M,S}
   B₀ = M(undef, data.n, data.n)
   map(i -> B₀[i, i] = data.α, 1:data.n)
 
@@ -204,7 +197,7 @@ end
 
 # Algorithm 3.2 (p15)
 # step 4, Jₖ is computed only if needed
-function inverse_cholesky(data::CompactLBFGSData{T,M,V}) where {T,M,V}
+function inverse_cholesky(data::CompactLBFGSData{T,M,S}) where {T,M,S}
   view(data.intermediate_diagonal.diag, 1:data.k) .= inv.(view(data.Dₖ.diag, 1:data.k))
   
   mul!(view(data.inverse_intermediate_1, 1:data.k, 1:data.k), view(data.intermediate_diagonal, 1:data.k, 1:data.k), transpose(view(data.Lₖ, 1:data.k, 1:data.k)))
@@ -243,8 +236,8 @@ function precompile_iterated_structure!(data::CompactLBFGSData)
 end
 
 # Algorithm 3.2 (p15)
-LinearAlgebra.mul!(Bv::V, op::CompactLBFGSOperator{T,M,V}, v::V) where {T,M,V<:AbstractVector{T}} = LinearAlgebra.mul!(Bv, op.data, v)
-function LinearAlgebra.mul!(Bv::V, data::CompactLBFGSData{T,M,V}, v::V) where {T,M,V<:AbstractVector{T}}
+LinearAlgebra.mul!(Bv::S, op::CompactLBFGSOperator{T,M,S}, v::S) where {T,M,S<:AbstractVector{T}} = LinearAlgebra.mul!(Bv, op.data, v)
+function LinearAlgebra.mul!(Bv::S, data::CompactLBFGSData{T,M,S}, v::S) where {T,M,S<:AbstractVector{T}}
   data.nprod += 1
   # step 1-4 and 6 mainly done by Base.push!
   # step 5
