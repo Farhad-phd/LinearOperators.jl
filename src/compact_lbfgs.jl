@@ -14,7 +14,6 @@ using Requires
 export CompactLBFGSOperator, CompactLBFGSData
 
 
-# if we have GPU eneabled, we use the GPUArray, for example LinearOperatorsCUDAExt
 storage_type(op::CompactLBFGSOperator{T}) = typeof(op.sol) 
 
 
@@ -126,7 +125,7 @@ function CompactLBFGSOperator(n::I; mem::I=5, S::DataType = Vector{T}) where {T,
   hermitian = true
   Bv = S(undef, n)
 
-  data = CompactLBFGSData(n; mem, T, S)
+  data = CompactLBFGSData(n; mem, S)
 
   prod! = @closure (res, v, α, β) -> begin
     mul!(Bv, data, v)
@@ -146,6 +145,8 @@ has_args5(op::CompactLBFGSOperator) = true
 use_prod5!(op::CompactLBFGSOperator) = true
 
 Base.push!(op::CompactLBFGSOperator{T,M,S}, s::S, y::S) where {T,M,S<:AbstractVector{T}} = Base.push!(op.data, s, y)
+
+
 function Base.push!(data::CompactLBFGSData{T,M,S}, s::S, y::S) where {T,M,S<:AbstractVector{T}}
   if data.k < data.mem # still some place in the structures
     data.k += 1
