@@ -25,7 +25,7 @@ end
 function _estimate_opnorm(
   B,
   ::Type{T};
-  kwargs...,
+  kwargs...
 ) where {T <: Union{Float32, Float64, ComplexF32, ComplexF64}}
   if ishermitian(B)
     return opnorm_eig(B; kwargs...)
