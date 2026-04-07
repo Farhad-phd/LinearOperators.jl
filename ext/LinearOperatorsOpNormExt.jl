@@ -15,11 +15,13 @@ end
 
 # Fallback for non-standard number types (uses TSVD)
 function _estimate_opnorm(B, ::Type{T}; kwargs...) where {T}
-  _, s, _ = tsvd(B, 1)
+  _, s, _ = tsvd(B, 1; kwargs...)
   return s[1], true
 end
 
 # Optimized path for standard FloatingPoint/Complex types
+# Note: Arpack strictly only supports Float32, Float64, ComplexF32, and ComplexF64.
+# Any other type (like BigFloat or Float16) must use the TSVD fallback above.
 function _estimate_opnorm(
   B,
   ::Type{T};
@@ -32,7 +34,7 @@ function _estimate_opnorm(
   end
 end
 
-function opnorm_eig(B; max_attempts::Int = 3, tiny_dense_threshold = 5)
+function opnorm_eig(B; max_attempts::Int = 3, tiny_dense_threshold = 5, kwargs...)
   n = size(B, 1)
 
   # Check if we can use direct dense methods (only if B supports conversion to Matrix)
@@ -49,7 +51,7 @@ function opnorm_eig(B; max_attempts::Int = 3, tiny_dense_threshold = 5)
 
   for attempt = 1:max_attempts
     try
-      d, nconv, _, _, _ = eigs(B; nev = nev, ncv = ncv, which = :LM, ritzvec = false, check = 1)
+      d, nconv, _, _, _ = eigs(B; nev = nev, ncv = ncv, which = :LM, ritzvec = false, check = 1, kwargs...)
 
       if nconv == 1
         return abs(d[1]), true
@@ -82,7 +84,7 @@ function opnorm_eig(B; max_attempts::Int = 3, tiny_dense_threshold = 5)
   return NaN, false
 end
 
-function opnorm_svd(B; max_attempts::Int = 3, tiny_dense_threshold = 5)
+function opnorm_svd(B; max_attempts::Int = 3, tiny_dense_threshold = 5, kwargs...)
   m, n = size(B)
 
   if min(m, n) ≤ tiny_dense_threshold
@@ -100,7 +102,7 @@ function opnorm_svd(B; max_attempts::Int = 3, tiny_dense_threshold = 5)
 
   for attempt = 1:max_attempts
     try
-      s, nconv, _, _, _ = svds(B; nsv = nsv, ncv = ncv, ritzvec = false, check = 1)
+      s, nconv, _, _, _ = svds(B; nsv = nsv, ncv = ncv, ritzvec = false, check = 1, kwargs...)
 
       if nconv >= 1
         return maximum(s.S), true
