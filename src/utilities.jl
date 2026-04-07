@@ -2,7 +2,6 @@ export check_ctranspose,
   check_hermitian, check_positive_definite, normest, solve_shifted_system!, ldiv!, estimate_opnorm
 import LinearAlgebra.ldiv!
 
-
 """
   normest(S) estimates the matrix 2-norm of S.
   This function is an adaptation of Matlab's built-in NORMEST.
