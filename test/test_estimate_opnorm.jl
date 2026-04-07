@@ -3,8 +3,7 @@ using Arpack
 using GenericLinearAlgebra
 
 @testset "estimate_opnorm type stability and dispatch" begin
-  for T in [Float32, Float64, ComplexF32, ComplexF64]
-    @testset "Type $T" begin
+  @testset "Type $T" for T in [Float32, Float64, ComplexF32, ComplexF64]
       
       # A) Rectangular Matrix (Forces SVD path)
       J_mat = zeros(T, 3, 2)
