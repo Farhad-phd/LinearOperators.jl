@@ -288,7 +288,6 @@ function ldiv!(
   return x
 end
 
-
 """
     estimate_opnorm(B::AbstractLinearOperator; kwargs...)
 
