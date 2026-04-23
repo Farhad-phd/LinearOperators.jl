@@ -291,19 +291,25 @@ end
 """
     estimate_opnorm(B::AbstractLinearOperator; kwargs...)
 
-Compute the estimate of the operator 2-norm (largest singular value) of a linear operator `B`.
+Compute an estimate of the operator 2-norm (largest singular value) of a linear operator `B`.
 
-This method dispatches to efficient algorithms depending on the properties and size of `B`.
-If `B` wraps a small dense matrix, it may use direct LAPACK routines. For larger operators,
-it uses iterative methods (ARPACK or TSVD) to estimate the norm efficiently.
+This method dispatches to efficient algorithms depending on the properties and size of `B`:
+- **Non-standard element types** (e.g., `BigFloat`, `Float16`): Always uses `TSVD.tsvd` as the fallback, since ARPACK only supports standard 32-bit and 64-bit floating-point types.
+- **Small operators** (dimension ≤ `tiny_dense_threshold`): Attempts to convert `B` to a dense `Matrix` and uses direct LAPACK routines (`LinearAlgebra.eigen` if Hermitian, `LinearAlgebra.svd` otherwise).
+- **Large, standard-type operators**:
+    - If `ishermitian(B)`: Uses `Arpack.eigs` to find the eigenvalue with the largest magnitude.
+    - Otherwise: Uses `Arpack.svds` to find the largest singular value.
 
 **Note:** This function allocates memory. It requires `Arpack.jl` and `TSVD.jl` 
 (and `GenericLinearAlgebra.jl` for generic types) to be loaded.
 
 # Arguments
 - `B::AbstractLinearOperator`: The linear operator to analyze.
-- `kwargs...`: Optional keyword arguments passed to the underlying norm estimation routines 
-  (e.g., `max_attempts`, `tiny_dense_threshold`).
+
+# Keyword Arguments
+- `max_attempts::Int=3`: Maximum number of retries for iterative solvers if convergence fails, doubling the Krylov subspace dimension (`ncv`) each time.
+- `tiny_dense_threshold::Int=5`: If the minimum dimension of `B` is less than or equal to this threshold, it attempts to use direct dense LAPACK routines.
+- `kwargs...`: Additional optional keyword arguments passed to the underlying iterative routines (`Arpack.eigs`, `Arpack.svds`, or `TSVD.tsvd`).
 
 # Returns
 - A tuple `(norm, success)` where:
